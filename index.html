@@ -60,7 +60,7 @@
 
     <!-- 🔍 搜尋列 -->
     <div>
-      <input type="text" id="searchInput" oninput="filterAndRenderList()" placeholder="🔍 搜尋姓名、班別、社..." class="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+      <input type="text" id="searchInput" oninput="filterAndRenderList()" placeholder="🔍 搜尋姓名、性別、歲數..." class="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
     </div>
 
     <!-- 📊 統計與快捷操作按鈕區 -->
@@ -72,12 +72,12 @@
 
       <!-- ⚡ 全選 / 全不選 / 重置 按鈕組 -->
       <div class="grid grid-cols-3 gap-2">
-        <button type="button" onclick="markAllInGroup('Present')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold py-2 px-1 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 shadow-sm">
+        <button type="button" onclick="markAllInGroup('出席')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold py-2 px-1 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 shadow-sm">
           <span>✓</span>
           <span>全選 (出席)</span>
         </button>
 
-        <button type="button" onclick="markAllInGroup('ABS')" class="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold py-2 px-1 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 shadow-sm">
+        <button type="button" onclick="markAllInGroup('缺席')" class="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold py-2 px-1 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 shadow-sm">
           <span>✗</span>
           <span>全不選 (缺席)</span>
         </button>
@@ -96,7 +96,7 @@
     </div>
 
     <!-- 點名列表區域 -->
-    <div id="memberList" class="space-y-2.5 max-h-[38vh] overflow-y-auto pr-1"></div>
+    <div id="memberList" class="space-y-2.5 max-h-[50vh] overflow-y-auto pr-1"></div>
 
     <!-- 🚀 確認完成點名 按鈕 -->
     <div class="pt-2">
@@ -137,7 +137,7 @@
 
         <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
           <p class="text-xs font-bold text-blue-900">2. 上傳 CSV 名單</p>
-          <p class="text-[11px] text-slate-500">學校匯出檔另存為「CSV UTF-8」後直接上傳；系統按標題名稱讀取 Group、班別、班號、性別、社、姓名。</p>
+          <p class="text-[11px] text-slate-500">學校匯出檔另存為「CSV UTF-8」後直接上傳；系統按標題名稱讀取 Group、性別、姓名、歲數。</p>
           <input type="file" id="csvFile" accept=".csv" class="w-full text-xs text-slate-500">
           <button type="button" id="uploadBtn" onclick="uploadCSVFile()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg text-xs font-bold transition">🚀 開始上傳匯入</button>
         </div>
@@ -164,8 +164,8 @@
           </select>
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-500 mb-1">搜尋運動員 / 班別</label>
-          <input type="text" id="histSearch" oninput="fetchHistory()" placeholder="輸入姓名或班別..." class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white">
+          <label class="block text-xs font-semibold text-slate-500 mb-1">搜尋運動員姓名</label>
+          <input type="text" id="histSearch" oninput="fetchHistory()" placeholder="輸入姓名..." class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white">
         </div>
         <div class="flex items-end">
           <button type="button" onclick="fetchHistory()" class="w-full bg-slate-700 text-white rounded-lg p-2 text-sm font-medium hover:bg-slate-800 transition">
@@ -190,6 +190,12 @@
         </div>
       </div>
 
+      <!-- 3b. 各狀態人次 -->
+      <div class="px-4 pb-3 bg-white border-b border-slate-100">
+        <div id="statBreakdown" class="flex flex-wrap gap-1.5 text-[11px] font-medium"></div>
+        <p class="text-[10px] text-slate-400 mt-1.5">出席率 = (出席 + 遲到) ÷ (總人次 − 比賽/海外訓練)</p>
+      </div>
+
       <!-- 4. 歷史明細列表 -->
       <div class="p-4 overflow-y-auto flex-1">
         <div id="histLoading" class="text-center py-8 text-slate-400 hidden">⏳ 載入歷史紀錄中...</div>
@@ -204,6 +210,33 @@
 
     let currentData = [];
     let serverNotes = {}; // { group: note } 由 GAS 回傳的當日備註
+
+    // 📋 點名狀態設定（須與 Code.gs 的 STATUS_LIST 一致）
+    const STATUS_LIST = [
+      { key: '出席',          btn: 'bg-emerald-600 text-white border-emerald-700', card: 'bg-emerald-50 border-emerald-300', badge: 'bg-emerald-100 text-emerald-800' },
+      { key: '遲到',          btn: 'bg-amber-500 text-white border-amber-600',     card: 'bg-amber-50 border-amber-300',     badge: 'bg-amber-100 text-amber-800' },
+      { key: '病假',          btn: 'bg-sky-600 text-white border-sky-700',         card: 'bg-sky-50 border-sky-300',         badge: 'bg-sky-100 text-sky-800' },
+      { key: '請假',          btn: 'bg-violet-600 text-white border-violet-700',   card: 'bg-violet-50 border-violet-300',   badge: 'bg-violet-100 text-violet-800' },
+      { key: '缺席',          btn: 'bg-rose-600 text-white border-rose-700',       card: 'bg-rose-50 border-rose-300',       badge: 'bg-rose-100 text-rose-800' },
+      { key: '比賽/海外訓練', btn: 'bg-indigo-600 text-white border-indigo-700',   card: 'bg-indigo-50 border-indigo-300',   badge: 'bg-indigo-100 text-indigo-800' }
+    ];
+    const STATUS_KEYS = STATUS_LIST.map(s => s.key);
+    const DEFAULT_STATUS = '缺席'; // 未點名時的預設狀態
+
+    // 名單資料欄位位置：[Group, 性別, 姓名, 歲數, 狀態, 點名者, 時間]
+    const F = { group: 0, gender: 1, name: 2, age: 3, status: 4, by: 5, at: 6 };
+
+    // 兼容舊資料 (Present / ABS)
+    function normStatus(s) {
+      const t = String(s || '').trim();
+      const l = t.toLowerCase();
+      if (l === 'present') return '出席';
+      if (l === 'abs' || l === 'absent') return '缺席';
+      return t;
+    }
+    function statusCfg(s) {
+      return STATUS_LIST.find(x => x.key === s) || null;
+    }
 
     function log(msg) {
       const logDiv = document.getElementById('debugLog');
@@ -317,8 +350,8 @@
       }
 
       const savedStatus = localStorage.getItem(`attendance_submit_${currentDate}_${selectedGroup}`);
-      const groupMembers = currentData.filter(row => (row[0] || '一般').trim() === selectedGroup);
-      const sheetRecord = groupMembers.find(row => row[6] && row[8]);
+      const groupMembers = currentData.filter(row => (row[F.group] || '一般').trim() === selectedGroup);
+      const sheetRecord = groupMembers.find(row => row[F.status] && row[F.at]);
 
       if (savedStatus || sheetRecord) {
         let timeStr = "";
@@ -329,8 +362,8 @@
           timeStr = data.time;
           updatedByStr = data.updatedBy;
         } else if (sheetRecord) {
-          updatedByStr = sheetRecord[7];
-          timeStr = sheetRecord[8];
+          updatedByStr = sheetRecord[F.by];
+          timeStr = sheetRecord[F.at];
         }
 
         banner.className = "p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all bg-emerald-50 text-emerald-800 border border-emerald-300";
@@ -369,6 +402,7 @@
 
         if (result.success && result.data && result.data.length > 0) {
           currentData = result.data;
+          currentData.forEach(r => { r[F.status] = normStatus(r[F.status]); });
           log(`✅ 成功載入名單：共 ${currentData.length} 位運動員！`);
           populateGroupDropdown();
           filterAndRenderList();
@@ -402,7 +436,7 @@
       const groupCounts = {};
 
       currentData.forEach(row => {
-        const g = (row[0] || '一般').trim();
+        const g = (row[F.group] || '一般').trim();
         groupCounts[g] = (groupCounts[g] || 0) + 1;
       });
 
@@ -430,6 +464,7 @@
       const selectedGroup = groupFilter ? groupFilter.value : '';
 
       if (!container) return;
+      const prevScroll = container.scrollTop;
       container.innerHTML = '';
 
       // 📝 同步備註框內容
@@ -450,31 +485,31 @@
         return;
       }
 
-      const groupMembers = currentData.filter(row => {
-        const g = (row[0] || '一般').trim();
-        return g === selectedGroup;
-      });
+      const groupMembers = currentData.filter(row => (row[F.group] || '一般').trim() === selectedGroup);
 
-      // 💡 預設每位運動員為 ABS (缺席)
+      // 💡 未點名者預設為 DEFAULT_STATUS
       groupMembers.forEach(row => {
-        if (!row[6]) {
-          row[6] = 'ABS';
-        }
+        if (!row[F.status]) row[F.status] = DEFAULT_STATUS;
       });
 
-      let presentCount = 0;
-      let totalCount = groupMembers.length;
-
+      // 統計各狀態人數
+      const counts = {};
+      STATUS_KEYS.forEach(k => counts[k] = 0);
       groupMembers.forEach(row => {
-        if (row[6] === 'Present') presentCount++;
+        if (counts[row[F.status]] !== undefined) counts[row[F.status]]++;
       });
+      const others = STATUS_KEYS
+        .filter(k => k !== '出席' && counts[k] > 0)
+        .map(k => `${k} ${counts[k]}`)
+        .join(' · ');
 
       const statsText = document.getElementById('statsText');
-      if (statsText) statsText.innerText = `${selectedGroup} 出席：${presentCount} / ${totalCount} 人`;
+      if (statsText) {
+        statsText.innerText = `${selectedGroup} 出席：${counts['出席']} / ${groupMembers.length} 人` + (others ? `（${others}）` : '');
+      }
 
       const filtered = groupMembers.filter(row => {
-        const [group, className, classNo, gender, house, name] = row;
-        const fullText = `${group||''} ${className||''} ${classNo||''} ${gender||''} ${house||''} ${name||''}`.toLowerCase();
+        const fullText = `${row[F.group]||''} ${row[F.gender]||''} ${row[F.name]||''} ${row[F.age]||''}`.toLowerCase();
         return fullText.includes(keyword);
       });
 
@@ -484,45 +519,44 @@
       }
 
       filtered.forEach((row) => {
-        const [group, className, classNo, gender, house, name, status] = row;
-        const isPresent = status === 'Present';
-        const origIdx = currentData.findIndex(r => r[0]===group && r[1]===className && r[2]===classNo && r[5]===name);
+        const group = row[F.group], gender = row[F.gender], name = row[F.name], age = row[F.age], status = row[F.status];
+        const cfg = statusCfg(status);
+        const origIdx = currentData.findIndex(r => r[F.group] === group && r[F.name] === name);
 
         const card = document.createElement('div');
-        card.className = `w-full p-3 rounded-xl border flex justify-between items-center transition-all cursor-pointer select-none active:scale-[0.98] ${
-          isPresent
-            ? 'bg-emerald-500 border-emerald-600 text-white shadow-md'
-            : 'bg-rose-50 border-rose-200 text-rose-800'
-        }`;
+        card.className = `w-full p-3 rounded-xl border space-y-2 transition-all ${cfg ? cfg.card : 'bg-slate-50 border-slate-200'}`;
 
         card.innerHTML = `
-          <div class="space-y-0.5">
-            <div class="flex items-center gap-1.5 text-[11px]">
-              <span class="${isPresent ? 'bg-emerald-700 text-white' : 'bg-rose-200 text-rose-800'} font-bold px-1.5 py-0.5 rounded">${group || '一般'}</span>
-              <span class="${isPresent ? 'bg-emerald-600 text-white' : 'bg-rose-100 text-rose-700'} px-1.5 py-0.5 rounded font-medium">${className||''} ${classNo ? classNo + '號' : ''}</span>
-              ${house ? `<span class="${isPresent ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-800'} px-1.5 py-0.5 rounded font-medium">${house}社</span>` : ''}
-            </div>
-            <div class="text-base font-bold pt-0.5">${name}</div>
+          <div class="flex items-center gap-1.5 text-[11px] flex-wrap">
+            <span class="bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded">${escapeHtml(group || '一般')}</span>
+            ${gender ? `<span class="bg-white/80 text-slate-600 px-1.5 py-0.5 rounded font-medium border border-slate-200">${escapeHtml(gender)}</span>` : ''}
+            ${age ? `<span class="bg-white/80 text-slate-600 px-1.5 py-0.5 rounded font-medium border border-slate-200">${escapeHtml(age)}歲</span>` : ''}
           </div>
-          <div class="text-xs font-bold px-3 py-1.5 rounded-full ${
-            isPresent
-              ? 'bg-emerald-800 text-white'
-              : 'bg-rose-600 text-white'
-          }">
-            ${isPresent ? '✓ 出席' : '✗ 缺席'}
+          <div class="text-base font-bold text-slate-800">${escapeHtml(name)}</div>
+          <div class="grid grid-cols-3 gap-1">
+            ${STATUS_LIST.map(s => `
+              <button type="button" data-status="${s.key}"
+                class="text-[11px] font-bold py-1.5 px-1 rounded-lg border transition active:scale-95 ${s.key === status ? s.btn : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}">
+                ${s.key}
+              </button>
+            `).join('')}
           </div>
         `;
 
-        card.onclick = () => toggleAttendance(origIdx, isPresent ? 'ABS' : 'Present');
+        card.querySelectorAll('button[data-status]').forEach(btn => {
+          btn.onclick = () => toggleAttendance(origIdx, btn.dataset.status);
+        });
         container.appendChild(card);
       });
+
+      container.scrollTop = prevScroll;
     }
 
     function toggleAttendance(index, newStatus) {
       if (!validateUpdatedBy()) return;
 
       if (index !== -1 && currentData[index]) {
-        currentData[index][6] = newStatus;
+        currentData[index][F.status] = newStatus;
         filterAndRenderList();
       }
     }
@@ -537,7 +571,7 @@
 
       if (!validateUpdatedBy()) return;
 
-      const targetMembers = currentData.filter(row => (row[0] || '一般').trim() === selectedGroup);
+      const targetMembers = currentData.filter(row => (row[F.group] || '一般').trim() === selectedGroup);
       if (targetMembers.length === 0) return;
       const currentDate = getSelectedDate();
 
@@ -547,9 +581,9 @@
         log(`⏳ 正在同步清空 Google Sheet 上 [${currentDate}] 【${selectedGroup}】的點名紀錄...`);
 
         targetMembers.forEach(row => {
-          row[6] = '';
-          row[7] = '';
-          row[8] = '';
+          row[F.status] = '';
+          row[F.by] = '';
+          row[F.at] = '';
         });
 
         localStorage.removeItem(`attendance_submit_${currentDate}_${selectedGroup}`);
@@ -562,8 +596,7 @@
 
         const updatedBy = document.getElementById('updatedBy').value.trim();
         const recordsToSend = targetMembers.map(row => ({
-          group: row[0], className: row[1], classNo: row[2],
-          gender: row[3], house: row[4], name: row[5], status: ''
+          group: row[F.group], gender: row[F.gender], name: row[F.name], age: row[F.age], status: ''
         }));
 
         try {
@@ -594,10 +627,10 @@
         return;
       }
 
-      let actionText = newStatus === 'ABS' ? "全不選 (缺席)" : "全選 (出席)";
+      let actionText = newStatus;
       if (!confirm(`確定要將 [${currentDate}] 【${selectedGroup}】（共 ${targetMembers.length} 人）全部設為「${actionText}」嗎？`)) return;
 
-      targetMembers.forEach(row => { row[6] = newStatus; });
+      targetMembers.forEach(row => { row[F.status] = newStatus; });
       filterAndRenderList();
       log(`⚡ 已將 [${currentDate}] ${selectedGroup} 標示為：${actionText}`);
     }
@@ -619,9 +652,8 @@
       const note = noteEl ? noteEl.value.trim() : '';
 
       const markedMembers = currentData.filter(row => {
-        const g = (row[0] || '一般').trim();
-        const status = row[6];
-        return g === selectedGroup && (status === 'Present' || status === 'ABS');
+        const g = (row[F.group] || '一般').trim();
+        return g === selectedGroup && STATUS_KEYS.includes(row[F.status]);
       });
 
       if (markedMembers.length === 0) {
@@ -637,8 +669,7 @@
       log(`⏳ 正在上傳 [${currentDate}] 【${selectedGroup}】共 ${markedMembers.length} 筆點名紀錄及備註至 Google Sheet...`);
 
       const recordsToSend = markedMembers.map(row => ({
-        group: row[0], className: row[1], classNo: row[2],
-        gender: row[3], house: row[4], name: row[5], status: row[6]
+        group: row[F.group], gender: row[F.gender], name: row[F.name], age: row[F.age], status: row[F.status]
       }));
 
       try {
@@ -752,10 +783,10 @@
     // 5. 📥 CSV 範本
     function downloadCSVTemplate() {
       const csvContent = "\uFEFF" + [
-        "年度,Category,Group,登入名稱,班別,班號,性別,社,Level,姓名",
-        "2026-2027,校隊,單車隊,demo0001,2A,7,M,信,中二,陳大文",
-        "2026-2027,校隊,單車隊,demo0002,3B,12,F,望,中三,李小花",
-        "2026-2027,校隊,單車隊,demo0003,1C,3,M,愛,中一,張小明"
+        "Group,性別,姓名,歲數",
+        "單車隊,M,陳大文,14",
+        "單車隊,F,李小花,15",
+        "單車隊,M,張小明,13"
       ].join("\n");
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -764,7 +795,7 @@
       a.download = "點名名單範本.csv";
       a.click();
       URL.revokeObjectURL(url);
-      log("✅ 範本已下載（學校格式）");
+      log("✅ 範本已下載（Group、性別、姓名、歲數）");
     }
 
     // 6. CSV 解析
@@ -827,30 +858,36 @@
           const header = rows[0].map(h => h.trim().toLowerCase());
           const col = {
             group: header.indexOf('group'),
-            className: header.indexOf('班別'),
-            classNo: header.indexOf('班號'),
             gender: header.indexOf('性別'),
-            house: header.indexOf('社'),
-            name: header.indexOf('姓名')
+            name: header.indexOf('姓名'),
+            age: header.indexOf('歲數')
           };
-          const missing = Object.entries(col).filter(([k, v]) => v === -1).map(([k]) => k);
+          const labels = { group: 'Group', gender: '性別', name: '姓名', age: '歲數' };
+          const missing = Object.entries(col).filter(([k, v]) => v === -1).map(([k]) => labels[k]);
           if (missing.length) {
-            throw new Error("CSV 缺少欄位：" + missing.join(', ') + "\n請使用學校格式（Group、班別、班號、性別、社、姓名）");
+            throw new Error("CSV 缺少欄位：" + missing.join('、') + "\n請使用範本格式（Group、性別、姓名、歲數）");
           }
 
           const members = [];
+          const seen = new Set();
+          const dups = [];
           for (let i = 1; i < rows.length; i++) {
             const r = rows[i];
             const name = (r[col.name] || '').trim();
             if (!name) continue;
+            const group = (r[col.group] || '').trim();
+            const key = group + '__' + name;
+            if (seen.has(key)) dups.push(`${group} - ${name}`);
+            seen.add(key);
             members.push({
-              group: (r[col.group] || '').trim(),
-              className: (r[col.className] || '').trim(),
-              classNo: (r[col.classNo] || '').trim(),
+              group: group,
               gender: (r[col.gender] || '').trim(),
-              house: (r[col.house] || '').trim(),
-              name: name
+              name: name,
+              age: (r[col.age] || '').trim()
             });
+          }
+          if (dups.length) {
+            throw new Error("同一隊伍內有重複姓名，請先修正後再上傳：\n" + dups.join('\n'));
           }
 
           log(`📊 CSV 解析成功：共 ${members.length} 筆資料，傳送中...`);
@@ -962,6 +999,14 @@
             document.getElementById('statRate').innerText = (stats.rate !== undefined ? stats.rate : 0) + '%';
             document.getElementById('statAbsent').innerText = stats.absent || 0;
 
+            const bd = stats.breakdown || {};
+            const bdEl = document.getElementById('statBreakdown');
+            if (bdEl) {
+              bdEl.innerHTML = STATUS_LIST.map(x =>
+                `<span class="px-2 py-0.5 rounded ${x.badge}">${x.key} ${bd[x.key] || 0}</span>`
+              ).join('');
+            }
+
             if (isFirstLoad === true && histGroup && histGroup.options.length <= 1 && data.logs) {
               const uniqueGroups = [...new Set(data.logs.map(l => l.group).filter(Boolean))];
               uniqueGroups.forEach(grpName => {
@@ -976,15 +1021,9 @@
               container.innerHTML = '<div class="text-center text-slate-400 py-6">查無相關點名紀錄</div>';
             } else {
               container.innerHTML = data.logs.map(item => {
-                const sLower = (item.status || '').toLowerCase().trim();
-
-                let statusBadge = `<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-600 font-medium">${escapeHtml(item.status) || '未知'}</span>`;
-
-                if (sLower === 'present' || sLower === '出席') {
-                  statusBadge = '<span class="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 font-medium">Present</span>';
-                } else if (sLower === 'abs' || sLower === 'absent' || sLower === '缺席' || sLower.includes('缺')) {
-                  statusBadge = '<span class="px-2 py-0.5 rounded text-xs bg-rose-100 text-rose-800 font-medium">缺席</span>';
-                }
+                const st = normStatus(item.status);
+                const hcfg = statusCfg(st);
+                const statusBadge = `<span class="px-2 py-0.5 rounded text-xs font-medium ${hcfg ? hcfg.badge : 'bg-slate-100 text-slate-600'}">${escapeHtml(st) || '未知'}</span>`;
 
                 const noteBlock = item.note
                   ? `<div class="mt-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">📝 ${escapeHtml(item.note)}</div>`
@@ -997,7 +1036,7 @@
                         <div class="text-xs text-slate-400 font-mono w-24">${escapeHtml(item.date)}</div>
                         <div>
                           <span class="font-bold text-slate-700">${escapeHtml(item.name)}</span>
-                          <span class="text-xs text-slate-400 ml-1">(${escapeHtml(item.className)} ${escapeHtml(item.classNo)})</span>
+                          <span class="text-xs text-slate-400 ml-1">(${escapeHtml(item.gender)}${item.age ? ' ' + escapeHtml(item.age) + '歲' : ''})</span>
                           <span class="text-xs bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded ml-2">${escapeHtml(item.group)}</span>
                         </div>
                       </div>
